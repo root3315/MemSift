@@ -22,6 +22,8 @@ from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 @dataclass
 class NetworkArtifact:
     """Represents a network-related artifact found in memory."""
+    __slots__ = ('artifact_type', 'value', 'offset', 'context', 'is_suspicious', 'suspicion_reasons')
+    
     artifact_type: str  # ip, port, socket, url, domain
     value: str
     offset: int
