@@ -11,28 +11,21 @@ Extracts and categorizes strings from memory dumps:
 from __future__ import annotations
 import re
 import base64
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 from collections import Counter
 
 from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 
 
-@dataclass
+@dataclass(slots=True)
 class ExtractedString:
     """Represents an extracted string with metadata."""
-    __slots__ = ('value', 'offset', 'string_type', 'category', 'is_sensitive', 'sensitivity_reasons')
-    
     value: str
     offset: int
     string_type: str  # ascii, unicode, base64, encoded
     category: str = "general"  # path, url, command, credential, etc.
     is_sensitive: bool = False
-    sensitivity_reasons: list[str] = None
-    
-    def __post_init__(self):
-        if self.sensitivity_reasons is None:
-            self.sensitivity_reasons = []
+    sensitivity_reasons: list[str] = field(default_factory=list)
 
 
 class StringExtractor(AnalysisPlugin):

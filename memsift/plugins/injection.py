@@ -11,27 +11,20 @@ Detects code injection techniques in memory:
 
 from __future__ import annotations
 import struct
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 
 from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 
 
-@dataclass
+@dataclass(slots=True)
 class InjectionIndicator:
     """Represents a potential code injection indicator."""
-    __slots__ = ('indicator_type', 'description', 'offset', 'address', 'confidence', 'evidence')
-    
     indicator_type: str  # rwx_memory, shellcode, hook, hollowing
     description: str
     offset: int
     address: int | None = None
     confidence: str = "medium"  # low, medium, high
-    evidence: bytes = None
-    
-    def __post_init__(self):
-        if self.evidence is None:
-            self.evidence = b''
+    evidence: bytes = field(default_factory=bytes)
 
 
 class InjectionDetector(AnalysisPlugin):

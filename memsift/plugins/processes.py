@@ -9,27 +9,20 @@ Scans memory dumps for process artifacts including:
 
 from __future__ import annotations
 import re
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 
 from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 
 
-@dataclass
+@dataclass(slots=True)
 class ProcessInfo:
     """Information about a detected process."""
-    __slots__ = ('pid', 'name', 'offset', 'parent_pid', 'is_suspicious', 'suspicion_reasons')
-    
     pid: int | None
     name: str
     offset: int
     parent_pid: int | None = None
     is_suspicious: bool = False
-    suspicion_reasons: list[str] = None
-    
-    def __post_init__(self):
-        if self.suspicion_reasons is None:
-            self.suspicion_reasons = []
+    suspicion_reasons: list[str] = field(default_factory=list)
 
 
 class ProcessScanner(AnalysisPlugin):

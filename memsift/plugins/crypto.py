@@ -10,27 +10,20 @@ Detects cryptographic artifacts in memory:
 
 from __future__ import annotations
 import re
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 
 from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 
 
-@dataclass
+@dataclass(slots=True)
 class CryptoArtifact:
     """Represents a cryptographic artifact found in memory."""
-    __slots__ = ('artifact_type', 'algorithm', 'offset', 'description', 'confidence', 'evidence')
-    
     artifact_type: str  # key, constant, encrypted_data, api
     algorithm: str | None
     offset: int
     description: str
     confidence: str = "medium"
-    evidence: bytes = None
-    
-    def __post_init__(self):
-        if self.evidence is None:
-            self.evidence = b''
+    evidence: bytes = field(default_factory=bytes)
 
 
 class CryptoScanner(AnalysisPlugin):

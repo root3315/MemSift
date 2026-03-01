@@ -12,28 +12,21 @@ from __future__ import annotations
 import re
 import socket
 import struct
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
 from collections import Counter
 
 from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 
 
-@dataclass
+@dataclass(slots=True)
 class NetworkArtifact:
     """Represents a network-related artifact found in memory."""
-    __slots__ = ('artifact_type', 'value', 'offset', 'context', 'is_suspicious', 'suspicion_reasons')
-    
     artifact_type: str  # ip, port, socket, url, domain
     value: str
     offset: int
     context: str = ""
     is_suspicious: bool = False
-    suspicion_reasons: list[str] = None
-    
-    def __post_init__(self):
-        if self.suspicion_reasons is None:
-            self.suspicion_reasons = []
+    suspicion_reasons: list[str] = field(default_factory=list)
 
 
 class NetworkAnalyzer(AnalysisPlugin):
