@@ -21,6 +21,8 @@ from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 @dataclass
 class ExtractedString:
     """Represents an extracted string with metadata."""
+    __slots__ = ('value', 'offset', 'string_type', 'category', 'is_sensitive', 'sensitivity_reasons')
+    
     value: str
     offset: int
     string_type: str  # ascii, unicode, base64, encoded

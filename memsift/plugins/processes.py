@@ -18,10 +18,12 @@ from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 @dataclass
 class ProcessInfo:
     """Information about a detected process."""
-    pid: Optional[int]
+    __slots__ = ('pid', 'name', 'offset', 'parent_pid', 'is_suspicious', 'suspicion_reasons')
+    
+    pid: int | None
     name: str
     offset: int
-    parent_pid: Optional[int] = None
+    parent_pid: int | None = None
     is_suspicious: bool = False
     suspicion_reasons: list[str] = None
     

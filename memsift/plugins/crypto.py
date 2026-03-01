@@ -19,8 +19,10 @@ from ..core.analyzer import AnalysisPlugin, AnalysisFinding
 @dataclass
 class CryptoArtifact:
     """Represents a cryptographic artifact found in memory."""
+    __slots__ = ('artifact_type', 'algorithm', 'offset', 'description', 'confidence', 'evidence')
+    
     artifact_type: str  # key, constant, encrypted_data, api
-    algorithm: Optional[str]
+    algorithm: str | None
     offset: int
     description: str
     confidence: str = "medium"

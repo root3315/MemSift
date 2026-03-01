@@ -6,13 +6,15 @@ Supports multiple memory dump formats and provides structured access to memory r
 """
 
 from __future__ import annotations
-import struct
+
+import io
 import mmap
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Iterator, BinaryIO, Optional
-from enum import Enum, auto
+import struct
+from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from pathlib import Path
 
 
 class MemoryFormat(Enum):
@@ -52,7 +54,7 @@ class MemoryRegion:
         """Check if an address falls within this region."""
         return self.start <= address < self.end
     
-    def offset_of(self, address: int) -> Optional[int]:
+    def offset_of(self, address: int) -> int | None:
         """Get the offset within this region for an address."""
         if self.contains(address):
             return address - self.start + self.data_offset
@@ -67,28 +69,28 @@ class MemoryDumpInfo:
     architecture: str = "unknown"
     os_type: str = "unknown"
     regions: list[MemoryRegion] = field(default_factory=list)
-    timestamp: Optional[str] = None
+    timestamp: str | None = None
     additional_info: dict = field(default_factory=dict)
 
 
 class MemoryParser:
     """
     Parser for memory dump files.
-    
+
     Supports raw dumps, ELF core dumps, and other formats.
     Provides memory-mapped access for efficient large file handling.
     """
-    
+
     # ELF magic number
     ELF_MAGIC = b'\x7fELF'
     # Common page sizes
     PAGE_SIZES = [4096, 8192, 16384, 65536]
-    
+
     def __init__(self, filepath: str | Path):
         self.filepath = Path(filepath)
-        self._mmap: Optional[mmap.mmap] = None
-        self._file: Optional[BinaryIO] = None
-        self._info: Optional[MemoryDumpInfo] = None
+        self._mmap: mmap.mmap | None = None
+        self._file: io.BufferedReader | None = None
+        self._info: MemoryDumpInfo | None = None
         
     @property
     def info(self) -> MemoryDumpInfo:
@@ -104,15 +106,33 @@ class MemoryParser:
     
     @contextmanager
     def open(self):
-        """Context manager for memory-mapped file access."""
+        """Context manager for memory-mapped file access.
+        
+        Raises:
+            FileNotFoundError: If the memory dump file does not exist.
+            PermissionError: If the file cannot be read due to permissions.
+            OSError: If memory mapping fails.
+        """
+        self._file = None
+        self._mmap = None
         try:
             self._file = open(self.filepath, 'rb')
             self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
             yield self
-        finally:
+        except FileNotFoundError:
             self.close()
+            raise
+        except PermissionError:
+            self.close()
+            raise
+        except OSError as e:
+            self.close()
+            raise OSError(f"Failed to memory-map file {self.filepath}: {e}") from e
+        except Exception:
+            self.close()
+            raise
     
-    def close(self):
+    def close(self) -> None:
         """Close memory-mapped file."""
         if self._mmap:
             self._mmap.close()
@@ -141,7 +161,7 @@ class MemoryParser:
         except Exception:
             return data.decode('latin-1', errors='replace')
     
-    def find_pattern(self, pattern: bytes, start: int = 0, end: Optional[int] = None) -> Iterator[int]:
+    def find_pattern(self, pattern: bytes, start: int = 0, end: int | None = None) -> Iterator[int]:
         """Find all occurrences of a byte pattern."""
         if self._mmap is None:
             raise RuntimeError("File not opened. Use 'with parser.open()' context manager.")
@@ -159,10 +179,14 @@ class MemoryParser:
             pos += idx + 1
     
     def _parse_header(self) -> MemoryDumpInfo:
-        """Parse the memory dump header to determine format and metadata."""
+        """Parse the memory dump header to determine format and metadata.
+        
+        Returns:
+            MemoryDumpInfo containing format and metadata.
+        """
         with open(self.filepath, 'rb') as f:
             magic = f.read(16)
-        
+
         # Detect format
         if magic.startswith(self.ELF_MAGIC):
             fmt = MemoryFormat.ELF
@@ -170,7 +194,7 @@ class MemoryParser:
         else:
             fmt = MemoryFormat.RAW
             info = self._parse_raw_header()
-        
+
         info.format = fmt
         return info
     
@@ -240,7 +264,11 @@ class MemoryParser:
         return info
     
     def _parse_raw_header(self) -> MemoryDumpInfo:
-        """Parse raw memory dump (heuristic analysis)."""
+        """Parse raw memory dump (heuristic analysis).
+        
+        Returns:
+            MemoryDumpInfo with raw dump metadata.
+        """
         info = MemoryDumpInfo(
             format=MemoryFormat.RAW,
             size=self.size,
@@ -263,10 +291,14 @@ class MemoryParser:
         return info
     
     def detect_architecture(self) -> str:
-        """Detect architecture from memory patterns. Call with parser open."""
+        """Detect architecture from memory patterns. Call with parser open.
+        
+        Returns:
+            Architecture string (x64, x86, or unknown).
+        """
         if self._mmap is None:
             return "unknown"
-        
+
         if self._detect_x64_patterns():
             return "x64"
         elif self._detect_x86_patterns():
@@ -274,7 +306,11 @@ class MemoryParser:
         return "unknown"
     
     def _detect_x64_patterns(self) -> bool:
-        """Detect x64 architecture patterns."""
+        """Detect x64 architecture patterns.
+        
+        Returns:
+            True if x64 patterns are detected.
+        """
         patterns = [
             b'\x48\x89\xe5',  # mov rbp, rsp
             b'\x48\x83\xec',  # sub rsp, imm8
@@ -289,7 +325,11 @@ class MemoryParser:
         return False
     
     def _detect_x86_patterns(self) -> bool:
-        """Detect x86 architecture patterns."""
+        """Detect x86 architecture patterns.
+        
+        Returns:
+            True if x86 patterns are detected.
+        """
         patterns = [
             b'\x55\x89\xe5',  # push ebp; mov ebp, esp
             b'\x83\xec',      # sub esp, imm8
@@ -303,7 +343,14 @@ class MemoryParser:
         return False
     
     def get_strings(self, min_length: int = 4) -> Iterator[tuple[int, str]]:
-        """Extract printable strings from memory."""
+        """Extract printable strings from memory.
+        
+        Args:
+            min_length: Minimum string length to extract.
+            
+        Yields:
+            Tuples of (offset, string) for each printable string found.
+        """
         if self._mmap is None:
             raise RuntimeError("File not opened. Use 'with parser.open()' context manager.")
 
