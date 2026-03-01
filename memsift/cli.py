@@ -18,6 +18,8 @@ from .plugins import (
     StringExtractor,
     InjectionDetector,
     CryptoScanner,
+    RegistryScanner,
+    FileSystemScanner,
 )
 from .utils.output import OutputFormatter, OutputFormat
 
@@ -35,29 +37,31 @@ Examples:
   %(prog)s analyze memory.dump -f json -o out.json  # JSON output
   %(prog)s strings memory.dump -m 8               # Extract strings (min length 8)
   %(prog)s info memory.dump                       # Show memory dump info
+  %(prog)s registry memory.dump                   # Scan registry artifacts
+  %(prog)s filesystem memory.dump                 # Scan file system artifacts
         """
     )
-    
+
     parser.add_argument(
         '-V', '--version',
         action='version',
         version=f'%(prog)s {__version__}'
     )
-    
+
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Enable verbose output'
     )
-    
+
     parser.add_argument(
         '--no-color',
         action='store_true',
         help='Disable colored output'
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
+
     # Analyze command
     analyze_parser = subparsers.add_parser(
         'analyze',
@@ -72,7 +76,7 @@ Examples:
     analyze_parser.add_argument(
         '-p', '--plugins',
         nargs='+',
-        choices=['processes', 'network', 'strings', 'injection', 'crypto', 'all'],
+        choices=['processes', 'network', 'strings', 'injection', 'crypto', 'registry', 'filesystem', 'all'],
         default=['all'],
         help='Plugins to run (default: all)'
     )
@@ -92,7 +96,7 @@ Examples:
         action='store_true',
         help='Only show findings (no summary)'
     )
-    
+
     # Info command
     info_parser = subparsers.add_parser(
         'info',
@@ -110,7 +114,7 @@ Examples:
         default='text',
         help='Output format (default: text)'
     )
-    
+
     # Strings command
     strings_parser = subparsers.add_parser(
         'strings',
@@ -139,7 +143,7 @@ Examples:
         action='store_true',
         help='Show string offsets'
     )
-    
+
     # Search command
     search_parser = subparsers.add_parser(
         'search',
@@ -165,7 +169,63 @@ Examples:
         action='store_true',
         help='Only show match count'
     )
-    
+
+    # Registry command
+    registry_parser = subparsers.add_parser(
+        'registry',
+        help='Scan for registry artifacts',
+        description='Scan memory dump for Windows registry artifacts'
+    )
+    registry_parser.add_argument(
+        'memory_dump',
+        type=Path,
+        help='Path to memory dump file'
+    )
+    registry_parser.add_argument(
+        '-f', '--format',
+        choices=['text', 'json', 'csv', 'table'],
+        default='text',
+        help='Output format (default: text)'
+    )
+    registry_parser.add_argument(
+        '-o', '--output',
+        type=Path,
+        help='Output file (default: stdout)'
+    )
+    registry_parser.add_argument(
+        '--suspicious-only',
+        action='store_true',
+        help='Only show suspicious registry artifacts'
+    )
+
+    # Filesystem command
+    filesystem_parser = subparsers.add_parser(
+        'filesystem',
+        help='Scan for file system artifacts',
+        description='Scan memory dump for file system artifacts'
+    )
+    filesystem_parser.add_argument(
+        'memory_dump',
+        type=Path,
+        help='Path to memory dump file'
+    )
+    filesystem_parser.add_argument(
+        '-f', '--format',
+        choices=['text', 'json', 'csv', 'table'],
+        default='text',
+        help='Output format (default: text)'
+    )
+    filesystem_parser.add_argument(
+        '-o', '--output',
+        type=Path,
+        help='Output file (default: stdout)'
+    )
+    filesystem_parser.add_argument(
+        '--suspicious-only',
+        action='store_true',
+        help='Only show suspicious file artifacts'
+    )
+
     return parser
 
 
@@ -174,13 +234,13 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if not args.memory_dump.exists():
         print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
         return 1
-    
+
     # Determine plugins to run
     if 'all' in args.plugins:
         plugin_names = None  # Run all
     else:
         plugin_names = args.plugins
-    
+
     # Create analyzer and register plugins
     analyzer = MemoryAnalyzer(args.memory_dump)
     analyzer.register_plugin(ProcessScanner())
@@ -188,7 +248,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     analyzer.register_plugin(StringExtractor())
     analyzer.register_plugin(InjectionDetector())
     analyzer.register_plugin(CryptoScanner())
-    
+    analyzer.register_plugin(RegistryScanner())
+    analyzer.register_plugin(FileSystemScanner())
+
     # Run analysis
     try:
         result = analyzer.analyze(plugin_names)
@@ -198,12 +260,12 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             import traceback
             traceback.print_exc()
         return 1
-    
+
     # Format output
     use_color = not args.no_color and sys.stdout.isatty()
     output_format = OutputFormat[args.format.upper()]
     formatter = OutputFormatter(output_format, use_color)
-    
+
     # Handle quiet mode
     if args.quiet:
         output_format = OutputFormat.TEXT if output_format == OutputFormat.TABLE else output_format
@@ -220,14 +282,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     else:
         # Full output
         output = formatter.format_result(result)
-        
+
         if args.output:
             with open(args.output, 'w') as f:
                 f.write(output)
             print(f"Report written to: {args.output}")
         else:
             print(output)
-    
+
     # Return exit code based on findings
     if result.critical_count > 0:
         return 2
@@ -241,15 +303,15 @@ def cmd_info(args: argparse.Namespace) -> int:
     if not args.memory_dump.exists():
         print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
         return 1
-    
+
     from .core.parser import MemoryParser
-    
+
     parser = MemoryParser(args.memory_dump)
-    
+
     try:
         with parser.open():
             info = parser.info
-            
+
             if args.format == 'json':
                 import json
                 data = {
@@ -278,7 +340,7 @@ def cmd_info(args: argparse.Namespace) -> int:
                 print(f"OS Type: {info.os_type}")
                 print(f"Regions: {len(info.regions)}")
                 print()
-                
+
                 if info.regions:
                     print("Memory Regions:")
                     print("-" * 70)
@@ -293,7 +355,7 @@ def cmd_info(args: argparse.Namespace) -> int:
             import traceback
             traceback.print_exc()
         return 1
-    
+
     return 0
 
 
@@ -302,30 +364,30 @@ def cmd_strings(args: argparse.Namespace) -> int:
     if not args.memory_dump.exists():
         print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
         return 1
-    
+
     from .core.parser import MemoryParser
-    
+
     parser = MemoryParser(args.memory_dump)
-    
+
     try:
         with parser.open():
             count = 0
             for offset, string in parser.get_strings(min_length=args.min_length):
                 if args.limit > 0 and count >= args.limit:
                     break
-                
+
                 if args.with_offsets:
                     print(f"{hex(offset):>12}  {string}")
                 else:
                     print(string)
                 count += 1
-            
+
             if args.verbose:
                 print(f"\nTotal strings extracted: {count}", file=sys.stderr)
     except Exception as e:
         print(f"Error extracting strings: {e}", file=sys.stderr)
         return 1
-    
+
     return 0
 
 
@@ -334,9 +396,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     if not args.memory_dump.exists():
         print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
         return 1
-    
+
     from .core.parser import MemoryParser
-    
+
     # Parse pattern
     if args.hex:
         try:
@@ -346,25 +408,142 @@ def cmd_search(args: argparse.Namespace) -> int:
             return 1
     else:
         pattern = args.pattern.encode('utf-8', errors='replace')
-    
+
     parser = MemoryParser(args.memory_dump)
-    
+
     try:
         with parser.open():
             matches = list(parser.find_pattern(pattern))
-            
+
             if args.count:
                 print(f"Found {len(matches)} matches")
             else:
                 for offset in matches:
                     print(f"Match at offset: {hex(offset)}")
-                
+
                 if not matches:
                     print("No matches found")
     except Exception as e:
         print(f"Error searching memory: {e}", file=sys.stderr)
         return 1
-    
+
+    return 0
+
+
+def cmd_registry(args: argparse.Namespace) -> int:
+    """Execute the registry scan command."""
+    if not args.memory_dump.exists():
+        print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
+        return 1
+
+    # Create analyzer and register only registry plugin
+    analyzer = MemoryAnalyzer(args.memory_dump)
+    analyzer.register_plugin(RegistryScanner())
+
+    # Run analysis
+    try:
+        result = analyzer.analyze(['registry_scanner'])
+    except Exception as e:
+        print(f"Error during registry scan: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+    # Format output
+    use_color = not args.no_color and sys.stdout.isatty()
+    output_format = OutputFormat[args.format.upper()]
+    formatter = OutputFormatter(output_format, use_color)
+
+    # Filter findings if suspicious-only
+    if args.suspicious_only:
+        # Get plugin and filter artifacts
+        registry_plugin = analyzer.plugins[0]
+        artifacts = [a for a in registry_plugin.get_artifacts() if a.is_suspicious]
+        
+        if output_format == OutputFormat.JSON:
+            import json
+            output = json.dumps([{
+                'artifact_type': a.artifact_type,
+                'key_path': a.key_path,
+                'offset': hex(a.offset),
+                'reasons': a.suspicion_reasons,
+            } for a in artifacts], indent=2)
+        else:
+            lines = [f"Found {len(artifacts)} suspicious registry artifacts:"]
+            for a in artifacts:
+                lines.append(f"  [{a.artifact_type.upper()}] {a.key_path[:80]}")
+                lines.append(f"    Reasons: {'; '.join(a.suspicion_reasons)}")
+            output = '\n'.join(lines)
+    else:
+        output = formatter.format_result(result)
+
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(output)
+        print(f"Report written to: {args.output}")
+    else:
+        print(output)
+
+    return 0
+
+
+def cmd_filesystem(args: argparse.Namespace) -> int:
+    """Execute the filesystem scan command."""
+    if not args.memory_dump.exists():
+        print(f"Error: Memory dump not found: {args.memory_dump}", file=sys.stderr)
+        return 1
+
+    # Create analyzer and register only filesystem plugin
+    analyzer = MemoryAnalyzer(args.memory_dump)
+    analyzer.register_plugin(FileSystemScanner())
+
+    # Run analysis
+    try:
+        result = analyzer.analyze(['filesystem_scanner'])
+    except Exception as e:
+        print(f"Error during filesystem scan: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+    # Format output
+    use_color = not args.no_color and sys.stdout.isatty()
+    output_format = OutputFormat[args.format.upper()]
+    formatter = OutputFormatter(output_format, use_color)
+
+    # Filter findings if suspicious-only
+    if args.suspicious_only:
+        # Get plugin and filter artifacts
+        fs_plugin = analyzer.plugins[0]
+        artifacts = [a for a in fs_plugin.get_artifacts() if a.is_suspicious]
+        
+        if output_format == OutputFormat.JSON:
+            import json
+            output = json.dumps([{
+                'artifact_type': a.artifact_type,
+                'path': a.path,
+                'file_type': a.file_type,
+                'offset': hex(a.offset),
+                'reasons': a.suspicion_reasons,
+            } for a in artifacts], indent=2)
+        else:
+            lines = [f"Found {len(artifacts)} suspicious file artifacts:"]
+            for a in artifacts:
+                lines.append(f"  [{a.artifact_type.upper()}] {a.path[:80]}")
+                lines.append(f"    Type: {a.file_type}, Reasons: {'; '.join(a.suspicion_reasons)}")
+            output = '\n'.join(lines)
+    else:
+        output = formatter.format_result(result)
+
+    if args.output:
+        with open(args.output, 'w') as f:
+            f.write(output)
+        print(f"Report written to: {args.output}")
+    else:
+        print(output)
+
     return 0
 
 
@@ -372,23 +551,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     """Main entry point."""
     parser = create_parser()
     args = parser.parse_args(argv)
-    
+
     if not args.command:
         parser.print_help()
         return 0
-    
+
     # Dispatch to command handler
     commands = {
         'analyze': cmd_analyze,
         'info': cmd_info,
         'strings': cmd_strings,
         'search': cmd_search,
+        'registry': cmd_registry,
+        'filesystem': cmd_filesystem,
     }
-    
+
     handler = commands.get(args.command)
     if handler:
         return handler(args)
-    
+
     parser.print_help()
     return 1
 
