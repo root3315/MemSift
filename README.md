@@ -2,6 +2,11 @@
 
 **Memory Forensics and RAM Analysis Tool for Security Investigations**
 
+[![CI/CD](https://github.com/memsift/memsift/actions/workflows/ci.yml/badge.svg)](https://github.com/memsift/memsift/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/memsift/memsift/branch/main/graph/badge.svg)](https://codecov.io/gh/memsift/memsift)
+[![Python Versions](https://img.shields.io/pypi/pyversions/memsift.svg)](https://pypi.org/project/memsift/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 MemSift is a professional, modular Python toolkit for memory forensics and incident response. It analyzes memory dumps to detect malware, extract artifacts, identify code injection, and uncover evidence of compromise.
 
 ## Features
@@ -15,6 +20,7 @@ MemSift is a professional, modular Python toolkit for memory forensics and incid
 - **Crypto Analysis**: Identifies encryption activity and ransomware indicators
 - **Multiple Output Formats**: Text, JSON, CSV, and table formats
 - **Memory Efficient**: Uses memory-mapped files for large dump analysis
+- **Type-Safe**: Full type hint coverage for better IDE support
 
 ## Installation
 
@@ -23,13 +29,23 @@ MemSift is a professional, modular Python toolkit for memory forensics and incid
 ```bash
 git clone https://github.com/memsift/memsift.git
 cd memsift
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ### Using pip
 
 ```bash
 pip install memsift
+```
+
+### Development Installation
+
+```bash
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
 ```
 
 ## Quick Start
@@ -148,6 +164,11 @@ Machine-readable format for integration with other tools.
 
 ```json
 {
+  "metadata": {
+    "generated": "2024-01-15T10:30:00",
+    "tool": "MemSift",
+    "version": "1.0.0"
+  },
   "summary": {
     "status": "COMPLETED",
     "total_findings": 15,
@@ -207,12 +228,11 @@ class MyPlugin(AnalysisPlugin):
     name = "my_plugin"
     description = "Custom analysis plugin"
     version = "1.0.0"
-    
+
     def analyze(self) -> list[AnalysisFinding]:
         findings = []
-        
+
         with self._parser.open():
-            # Access memory via self._parser
             for offset, string in self._parser.get_strings(min_length=8):
                 if "suspicious" in string.lower():
                     findings.append(AnalysisFinding(
@@ -222,9 +242,9 @@ class MyPlugin(AnalysisPlugin):
                         description="Found suspicious content",
                         offset=offset,
                     ))
-        
+
         return findings
-    
+
     def get_statistics(self) -> dict:
         return {"custom_metric": 42}
 
@@ -269,60 +289,147 @@ memsift strings memory.dump -m 50 | grep -i "powershell.*-enc"
 - Python 3.10+
 - No external dependencies (uses standard library only)
 
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=memsift --cov-report=html
+
+# Run specific test file
+pytest tests/test_parser.py
+```
+
+### Code Quality
+
+```bash
+# Linting
+ruff check memsift/
+
+# Formatting
+ruff format memsift/
+
+# Type checking
+mypy memsift/
+
+# Security scanning
+bandit -r memsift/
+```
+
+### Pre-commit Hooks
+
+```bash
+# Install hooks
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+```
+
 ## Project Structure
 
 ```
 memsift/
-├── __init__.py          # Package initialization
-├── __main__.py          # Entry point
-├── cli.py               # Command-line interface
-├── core/
+├── memsift/                 # Source code
+│   ├── __init__.py          # Package initialization
+│   ├── __main__.py          # Entry point
+│   ├── cli.py               # Command-line interface
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── parser.py        # Memory dump parsing
+│   │   └── analyzer.py      # Analysis engine
+│   ├── plugins/
+│   │   ├── __init__.py
+│   │   ├── base.py          # Plugin base class
+│   │   ├── processes.py     # Process scanner
+│   │   ├── network.py       # Network analyzer
+│   │   ├── strings.py       # String extractor
+│   │   ├── injection.py     # Injection detector
+│   │   └── crypto.py        # Crypto scanner
+│   └── utils/
+│       ├── __init__.py
+│       ├── output.py        # Output formatting
+│       └── patterns.py      # Pattern matching
+├── tests/                   # Test suite
 │   ├── __init__.py
-│   ├── parser.py        # Memory dump parsing
-│   └── analyzer.py      # Analysis engine
-├── plugins/
-│   ├── __init__.py
-│   ├── base.py          # Plugin base class
-│   ├── processes.py     # Process scanner
-│   ├── network.py       # Network analyzer
-│   ├── strings.py       # String extractor
-│   ├── injection.py     # Injection detector
-│   └── crypto.py        # Crypto scanner
-└── utils/
-    ├── __init__.py
-    ├── output.py        # Output formatting
-    └── patterns.py      # Pattern matching
+│   ├── conftest.py
+│   ├── test_parser.py
+│   ├── test_analyzer.py
+│   ├── test_plugins.py
+│   ├── test_output.py
+│   ├── test_patterns.py
+│   └── test_cli.py
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # CI/CD pipeline
+├── pyproject.toml           # Project configuration
+├── README.md                # This file
+├── CONTRIBUTING.md          # Contribution guidelines
+└── SECURITY.md              # Security policy
 ```
 
 ## Changelog
 
 ### [Unreleased]
 
+#### Added
+- Comprehensive unit tests with ≥80% coverage target
+- Integration tests for critical analysis paths
+- CI/CD pipeline with GitHub Actions
+- Pre-commit hooks for code quality
+- CONTRIBUTING.md and SECURITY.md documentation
+- Type hints throughout the codebase
+- Security scanning in CI pipeline
+
 #### Improved
-- **Type hints consistency**: Updated `MemoryParser` class to use modern type hints (`io.BufferedReader`, `mmap.mmap`, `int | None`) for better IDE support and type checking.
-- **Context manager error handling**: Enhanced `MemoryParser.open()` with explicit exception handling for `FileNotFoundError`, `PermissionError`, and `OSError`. Resources are now properly cleaned up even when exceptions occur during initialization.
-- **Memory efficiency**: Added `__slots__` to high-frequency dataclasses (`ProcessInfo`, `NetworkArtifact`, `InjectionIndicator`, `CryptoArtifact`, `ExtractedString`) reducing memory footprint by ~40-50% per instance during large-scale analysis.
+- **Type hints consistency**: Updated all modules to use modern type hints for better IDE support and type checking
+- **Code organization**: Refactored complex functions (>50 lines) into smaller, focused functions
+- **Memory efficiency**: Added `__slots__` to dataclasses reducing memory footprint by ~40-50%
+- **Error handling**: Enhanced context managers with explicit exception handling
+- **Documentation**: Added comprehensive docstrings and inline comments
+- **Performance**: Optimized string extraction and pattern matching algorithms
 
 #### Changed
-- Replaced `Optional[T]` with modern `T | None` syntax across plugin dataclasses for Python 3.10+ consistency.
-- Removed unused `BinaryIO` import from `parser.py` in favor of concrete `io.BufferedReader` type.
+- Replaced `Optional[T]` with modern `T | None` syntax for Python 3.10+ consistency
+- Improved variable and function naming for clarity
+- Enhanced output formatting with better structure
+
+#### Fixed
+- Various type annotation issues
+- Resource cleanup in context managers
+- Edge cases in pattern matching
 
 ---
 
-## License
-
-MIT License - See LICENSE file for details.
-
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
 3. Make your changes
-4. Run tests: `pytest`
-5. Submit a pull request
+4. Run tests: `pytest --cov=memsift`
+5. Run linting: `ruff check memsift/ && mypy memsift/`
+6. Submit a pull request
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for our security policy and vulnerability reporting process.
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file for details.
 
 ## Disclaimer
 
 MemSift is designed for legitimate security research, incident response, and educational purposes. Only use this tool on systems you own or have explicit permission to analyze.
+
+## Acknowledgments
+
+- The Volatility Foundation for inspiration
+- The Python security community
+- All contributors and users

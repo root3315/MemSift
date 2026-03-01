@@ -1,0 +1,120 @@
+# Pre-commit configuration for MemSift
+# See https://pre-commit.com for more information
+
+repos:
+  # ============================================================================
+  # CORE HOOKS
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # File validation
+      - id: trailing-whitespace
+        description: Remove trailing whitespace
+      - id: end-of-file-fixer
+        description: Ensure files end with a newline
+      - id: check-yaml
+        description: Validate YAML files
+        args: ['--unsafe']
+      - id: check-json
+        description: Validate JSON files
+      - id: check-toml
+        description: Validate TOML files
+      - id: check-merge-conflict
+        description: Check for merge conflict markers
+      - id: check-added-large-files
+        description: Prevent large files from being committed
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+        description: Detect committed private keys
+      - id: detect-aws-credentials
+        description: Detect committed AWS credentials
+        args: ['--allow-missing-credentials']
+
+  # ============================================================================
+  # PYTHON LINTING & FORMATTING
+  # ============================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      # Linting
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        description: Run Ruff linter
+      # Formatting
+      - id: ruff-format
+        description: Run Ruff formatter
+
+  # ============================================================================
+  # TYPE CHECKING
+  # ============================================================================
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: Type check with MyPy
+        additional_dependencies:
+          - types-setuptools
+        args: [--ignore-missing-imports, --warn-return-any, --warn-unused-configs]
+        exclude: ^tests/
+
+  # ============================================================================
+  # SECURITY
+  # ============================================================================
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        name: Security check with Bandit
+        args: ['-r', '-c', 'pyproject.toml']
+        exclude: ^tests/
+
+  # ============================================================================
+  # TESTING
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Run tests
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        args: [-v, --tb=short]
+        stages: [pre-push]
+
+  # ============================================================================
+  # DOCUMENTATION
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-docstring-first
+        description: Check for docstrings as first statement
+        exclude: ^tests/
+
+  # ============================================================================
+  # GIT HOOKS
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-case-conflict
+        description: Check for case conflicts in filenames
+      - id: check-symlinks
+        description: Check for broken symlinks
+      - id: destroyed-symlinks
+        description: Detect destroyed symlinks
+
+# ================================================================================
+# GLOBAL SETTINGS
+# ================================================================================
+default_stages: [pre-commit]
+fail_fast: false
+parallel: true
+
+# Color output
+color: true
+
+# Verbose output for debugging
+verbose: false
